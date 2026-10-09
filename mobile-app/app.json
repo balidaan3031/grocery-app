@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "Fresh Mart POS",
+    "slug": "fresh-mart-pos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "freshmartpos",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.freshmart.pos",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Fresh Mart uses the camera to scan product barcodes into the cart.",
+        "NSPhotoLibraryUsageDescription": "Fresh Mart needs photo access so you can attach an image to a product.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.freshmart.pos",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F8A5F",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.CAMERA"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Fresh Mart uses the camera to scan product barcodes into the cart.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Fresh Mart needs photo access so you can attach an image to a product."
+        }
+      ],
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#0F8A5F"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}

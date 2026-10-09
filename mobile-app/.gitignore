@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+.expo/
+.expo-shared/
+*.log
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Secrets — never commit these
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Native build output
+mobile-app/android/
+mobile-app/ios/
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
