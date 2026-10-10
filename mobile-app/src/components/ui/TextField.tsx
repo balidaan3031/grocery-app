@@ -77,6 +77,12 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(
         ) : null}
 
         <View
+          // Always its own native container. The focus ring adds a shadow and an
+          // Android elevation, and either decides whether the renderer mounts
+          // this view's children inside it or hoists them into its parent.
+          // Flipping that on focus moved the TextInput to another native
+          // parent, which drops focus — so every tap on a field undid itself.
+          collapsable={false}
           style={[
             styles.field,
             rest.multiline && styles.fieldMultiline,
