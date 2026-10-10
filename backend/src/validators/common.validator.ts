@@ -18,7 +18,11 @@ export const money = (label = 'Amount') =>
     .number({ invalid_type_error: `${label} must be a number` })
     .nonnegative(`${label} cannot be negative`)
     .max(99_999_999, `${label} is unrealistically large`)
-    .refine((value) => Number.isInteger(Math.round(value * 100)), {
+    // Compared against the rounded value, with a tolerance for binary
+    // fractions (19.99 * 100 is 1998.9999999999998). Testing
+    // `Number.isInteger(Math.round(x))` would always pass and let 10.005
+    // through for Postgres to round silently.
+    .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
       message: `${label} may have at most 2 decimal places`,
     });
 

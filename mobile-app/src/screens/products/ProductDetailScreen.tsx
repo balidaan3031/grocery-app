@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
@@ -34,6 +35,8 @@ type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
 export const ProductDetailScreen = ({ route }: RootScreenProps<'ProductDetail'>) => {
   const navigation = useNavigation<Navigation>();
+  // Footers sit on the bottom edge, under the home indicator or nav bar.
+  const insets = useSafeAreaInsets();
   const { productId } = route.params;
 
   const isAdmin = useAuthStore(selectIsAdmin);
@@ -385,7 +388,7 @@ export const ProductDetailScreen = ({ route }: RootScreenProps<'ProductDetail'>)
         ) : null}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: spacing.base + insets.bottom }]}>
         <Button
           label={isInactive ? 'Deactivated' : isOutOfStock ? 'Out of stock' : 'Add to cart'}
           icon={

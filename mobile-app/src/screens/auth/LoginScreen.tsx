@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -49,6 +48,10 @@ export const LoginScreen = () => {
   };
 
   const handleSubmit = async () => {
+    // Guarded here rather than by making the fields read-only while signing
+    // in: toggling `editable` drops focus and freezes the form for as long as
+    // the request takes, then leaves the cashier re-tapping a field.
+    if (isSigningIn) return;
     clearError();
     if (!validate()) return;
     await login(email, password);
@@ -64,10 +67,9 @@ export const LoginScreen = () => {
       />
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        {/* Padding on Android too: it draws edge-to-edge, so the window is no
+            longer resized and the keyboard would cover the password field. */}
+        <KeyboardAvoidingView style={styles.flex} behavior="padding">
           <ScrollView
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
@@ -108,7 +110,6 @@ export const LoginScreen = () => {
                 returnKeyType="next"
                 onSubmitEditing={() => passwordRef.current?.focus()}
                 containerStyle={styles.field}
-                editable={!isSigningIn}
               />
 
               <TextField
@@ -129,7 +130,6 @@ export const LoginScreen = () => {
                 returnKeyType="go"
                 onSubmitEditing={handleSubmit}
                 containerStyle={styles.field}
-                editable={!isSigningIn}
               />
 
               {serverError ? (

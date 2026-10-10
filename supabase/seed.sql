@@ -78,7 +78,9 @@ on conflict (barcode) do nothing;
 -- Opening stock
 -- Routed through adjust_inventory() rather than a plain UPDATE so the seeded
 -- quantities arrive with a matching ledger entry, exactly like real restocking.
--- The `i.quantity = 0` guard makes a second run a no-op.
+-- Guarded on the product's own opening-stock ledger entry, so a second run is a
+-- no-op. Not on zero stock: that would restock the demo product kept out of
+-- stock below, and any product that has genuinely sold out.
 -- -----------------------------------------------------------------------------
 do $seed$
 declare
@@ -102,7 +104,11 @@ begin
     ) as v(barcode, qty)
     join public.products  p on p.barcode = v.barcode
     join public.inventory i on i.product_id = p.id
-    where i.quantity = 0
+    where not exists (
+      select 1
+      from public.inventory_movements m
+      where m.product_id = p.id and m.reason = 'Opening stock (seed)'
+    )
   loop
     perform public.adjust_inventory(
       r.product_id, r.qty, 'purchase', 'Opening stock (seed)', null, 'seed', null

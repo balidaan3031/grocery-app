@@ -36,6 +36,15 @@ export class ApiError extends Error {
     return new ApiError(403, 'FORBIDDEN', message);
   }
 
+  /**
+   * The account was switched off by an admin. Distinct from FORBIDDEN, which
+   * also covers a staff member reaching an admin-only route, so a client can
+   * sign out on this one without signing out on that one.
+   */
+  static accountDeactivated(message = 'This account has been deactivated'): ApiError {
+    return new ApiError(403, 'ACCOUNT_DEACTIVATED', message);
+  }
+
   static notFound(resource = 'Resource'): ApiError {
     return new ApiError(404, 'NOT_FOUND', `${resource} not found`);
   }

@@ -21,7 +21,7 @@ import { OrderRow } from '../../components/orders/OrderRow';
 import { ProductImage } from '../../components/products/ProductImage';
 import { useAsync } from '../../hooks/useAsync';
 import { dashboardApi } from '../../services/api';
-import { useAuthStore } from '../../store/authStore';
+import { useAuthStore, selectIsAdmin } from '../../store/authStore';
 import { useCartStore, selectCartCount } from '../../store/cartStore';
 import { colors, radius, shadows, spacing, typography } from '../../theme';
 import { formatCompactCurrency, formatCurrency, formatNumber, pluralise } from '../../utils/format';
@@ -39,6 +39,7 @@ const greeting = (): string => {
 export const DashboardScreen = () => {
   const navigation = useNavigation<Navigation>();
   const user = useAuthStore((state) => state.user);
+  const isAdmin = useAuthStore(selectIsAdmin);
   const storeName = useAuthStore((state) => state.config?.storeName ?? 'Fresh Mart');
   const cartCount = useCartStore(selectCartCount);
 
@@ -99,7 +100,7 @@ export const DashboardScreen = () => {
                 {greeting()}
               </Text>
               <Text variant="h3" numberOfLines={1}>
-                {user?.fullName?.split(' ')[0] ?? 'there'}
+                {user?.fullName?.trim().split(/\s+/)[0] || 'there'}
               </Text>
             </View>
           </Pressable>
@@ -178,11 +179,16 @@ export const DashboardScreen = () => {
           </Pressable>
 
           <View style={styles.actionRow}>
-            <QuickAction
-              icon="add-circle-outline"
-              label="Add product"
-              onPress={() => navigation.navigate('ProductForm', {})}
-            />
+            {/* Only admins can create products; staff get the cart instead. */}
+            {isAdmin ? (
+              <QuickAction
+                icon="add-circle-outline"
+                label="Add product"
+                onPress={() => navigation.navigate('ProductForm', {})}
+              />
+            ) : (
+              <QuickAction icon="cart-outline" label="Cart" onPress={() => navigation.navigate('Cart')} />
+            )}
             <QuickAction
               icon="swap-vertical-outline"
               label="Adjust stock"

@@ -35,7 +35,7 @@ grocery-app/
 │       └── scripts/     Migration runner, setup.sql builder, staff-account seeder
 │
 ├── supabase/
-│   ├── migrations/      0001–0009, run in order
+│   ├── migrations/      0001–0010, run in order
 │   └── seed.sql         30 demo products with real EAN-13 barcodes
 │
 └── docs/API.md          Full endpoint reference
@@ -132,6 +132,7 @@ reference functions created in 0004, 0007's storage policies call
 | 7 | `supabase/migrations/0007_storage.sql` | `product-images` bucket + storage policies |
 | 8 | `supabase/migrations/0008_security_hardening.sql` | Clients become read-only; roles only from `app_metadata`; business functions callable by the API alone |
 | 9 | `supabase/migrations/0009_barcode_and_inventory_hardening.sql` | One product per barcode in any GTIN format; movement direction checks; idempotent stock changes; atomic recount (`set_inventory_count`), add-to-cart (`add_cart_item`) and `inventory_summary` |
+| 10 | `supabase/migrations/0010_store_time_and_stock_recency.sql` | Dashboard days, sales trend and order-number dates in store time (`Asia/Kolkata` — edit the file for another zone); `inventory_levels` view for the inventory "Recent" sort |
 
 0009 stops with an error naming the products if the catalogue already holds
 one barcode under two formats (e.g. `012345678905` and `0012345678905`) —

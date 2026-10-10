@@ -8,6 +8,9 @@ export interface CategoryWithCount extends CategoryRow {
   productCount: number;
 }
 
+/** PostgREST's default `max-rows`; a larger page would be truncated to it. */
+const COUNT_PAGE_SIZE = 1000;
+
 export const listCategories = async (
   options: { includeInactive?: boolean; withCounts?: boolean } = {},
 ): Promise<CategoryRow[] | CategoryWithCount[]> => {
@@ -18,18 +21,27 @@ export const listCategories = async (
 
   if (!options.withCounts) return categories;
 
-  // One grouped read instead of a count query per category.
-  const { data: products, error } = await supabaseAdmin
-    .from('products')
-    .select('category_id')
-    .eq('is_active', true);
-
-  if (error) throw toApiError(error, 'Products');
-
+  // One grouped read instead of a count query per category — paged, because
+  // PostgREST caps a response at 1000 rows and a single read silently
+  // undercounted any catalogue larger than that.
   const counts = new Map<string, number>();
-  for (const row of products ?? []) {
-    if (!row.category_id) continue;
-    counts.set(row.category_id, (counts.get(row.category_id) ?? 0) + 1);
+  for (let from = 0; ; from += COUNT_PAGE_SIZE) {
+    const { data: products, error } = await supabaseAdmin
+      .from('products')
+      .select('category_id')
+      .eq('is_active', true)
+      .not('category_id', 'is', null)
+      .order('id', { ascending: true })
+      .range(from, from + COUNT_PAGE_SIZE - 1);
+
+    if (error) throw toApiError(error, 'Products');
+
+    for (const row of products ?? []) {
+      if (!row.category_id) continue;
+      counts.set(row.category_id, (counts.get(row.category_id) ?? 0) + 1);
+    }
+
+    if (!products || products.length < COUNT_PAGE_SIZE) break;
   }
 
   return categories.map((category) => ({

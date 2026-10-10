@@ -84,6 +84,22 @@ export const toApiError = (error: PostgrestError, resource = 'Resource'): ApiErr
     case '42501':
       return ApiError.forbidden('Not permitted by database policy');
 
+    // The database is behind the code: a migration has not been applied, or
+    // PostgREST's schema cache predates it. Said plainly, because "Database
+    // request failed" sends whoever is debugging it looking in the wrong place.
+    case 'PGRST202': // function not found
+    case 'PGRST204': // column not found
+    case 'PGRST205': // table or view not found
+    case '42703': // undefined column
+    case '42883': // undefined function
+    case '42P01': // undefined table
+      logger.error({ err: error }, 'Database schema is out of date');
+      return new ApiError(
+        500,
+        'SCHEMA_OUT_OF_DATE',
+        'The database is missing a recent migration. Apply the pending migrations in supabase/migrations, then reload the schema cache.',
+      );
+
     default:
       logger.error({ err: error }, 'Unmapped Supabase error');
       return ApiError.internal('Database request failed');

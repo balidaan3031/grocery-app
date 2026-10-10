@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
-import { supabaseAdmin, supabaseAuth } from '../config/supabase';
+import { createAuthClient, supabaseAdmin } from '../config/supabase';
 import { ApiError } from '../utils/ApiError';
 import { toApiError, unwrap } from '../utils/supabaseError';
 import { logger } from '../config/logger';
@@ -35,7 +35,7 @@ const loadProfile = async (userId: string): Promise<UserRow> =>
  * distinguishing them would turn the endpoint into an account enumerator.
  */
 export const login = async (email: string, password: string): Promise<LoginResult> => {
-  const { data, error } = await supabaseAuth.auth.signInWithPassword({ email, password });
+  const { data, error } = await createAuthClient().auth.signInWithPassword({ email, password });
 
   if (error || !data.session || !data.user) {
     logger.warn({ email, reason: error?.message }, 'Failed sign-in attempt');
@@ -47,15 +47,19 @@ export const login = async (email: string, password: string): Promise<LoginResul
   if (!profile.is_active) {
     // Do not leave a usable session behind for a disabled account.
     await supabaseAdmin.auth.admin.signOut(data.session.access_token).catch(() => undefined);
-    throw ApiError.forbidden('This account has been deactivated. Contact your store admin.');
+    throw ApiError.accountDeactivated('This account has been deactivated. Contact your store admin.');
   }
 
   return { user: toAuthenticatedUser(profile), session: toSession(data.session) };
 };
 
-/** Revokes the presented token so a signed-out device cannot keep using it. */
+/**
+ * Revokes the presented session so a signed-out device cannot keep using it.
+ * Only this session: the default scope is global, which also signed out every
+ * other till using the same account.
+ */
 export const logout = async (accessToken: string): Promise<void> => {
-  const { error } = await supabaseAdmin.auth.admin.signOut(accessToken);
+  const { error } = await supabaseAdmin.auth.admin.signOut(accessToken, 'local');
   // An already-expired token is a successful logout from the user's point of view.
   if (error && !/token|session/i.test(error.message)) {
     logger.warn({ err: error }, 'Sign-out did not revoke cleanly');
@@ -63,7 +67,7 @@ export const logout = async (accessToken: string): Promise<void> => {
 };
 
 export const refresh = async (refreshToken: string): Promise<LoginResult> => {
-  const { data, error } = await supabaseAuth.auth.refreshSession({ refresh_token: refreshToken });
+  const { data, error } = await createAuthClient().auth.refreshSession({ refresh_token: refreshToken });
 
   if (error || !data.session || !data.user) {
     throw ApiError.unauthorized('Session could not be refreshed, please sign in again');
@@ -71,7 +75,7 @@ export const refresh = async (refreshToken: string): Promise<LoginResult> => {
 
   const profile = await loadProfile(data.user.id);
   if (!profile.is_active) {
-    throw ApiError.forbidden('This account has been deactivated');
+    throw ApiError.accountDeactivated();
   }
 
   return { user: toAuthenticatedUser(profile), session: toSession(data.session) };
@@ -112,13 +116,22 @@ export const changePassword = async (
   currentPassword: string,
   newPassword: string,
 ): Promise<void> => {
-  const { error: verifyError } = await supabaseAuth.auth.signInWithPassword({
+  const { data: verified, error: verifyError } = await createAuthClient().auth.signInWithPassword({
     email: user.email,
     password: currentPassword,
   });
 
   if (verifyError) {
-    throw ApiError.unauthorized('Current password is incorrect');
+    // Not 401: the caller's own session is fine, and a client treats 401 as
+    // "refresh the token and retry", which would only repeat the same answer.
+    throw new ApiError(400, 'INVALID_CURRENT_PASSWORD', 'Current password is incorrect');
+  }
+
+  // The check opened a session of its own; nothing will ever use it.
+  if (verified.session) {
+    await supabaseAdmin.auth.admin
+      .signOut(verified.session.access_token, 'local')
+      .catch(() => undefined);
   }
 
   const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, {

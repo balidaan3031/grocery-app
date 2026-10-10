@@ -42,8 +42,22 @@ const inferDevApiUrl = (): string => {
   return `http://localhost:${DEFAULT_PORT}${API_PREFIX}`;
 };
 
+/**
+ * Accepts the API's address with or without its `/api/v1` prefix. Pasting just
+ * the deployment's domain (`https://my-api.vercel.app`) is the natural thing to
+ * do, and without the prefix every request lands on a route that does not
+ * exist. A URL with any other path is used exactly as given.
+ */
+const withApiPrefix = (url: string): string => {
+  const trimmed = url.trim().replace(/\/+$/, '');
+  const path = trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, '');
+  if (path === '') return `${trimmed}${API_PREFIX}`;
+  if (path === '/api') return `${trimmed}/v1`;
+  return trimmed;
+};
+
 export const env = {
-  apiUrl: explicitApiUrl?.replace(/\/+$/, '') || inferDevApiUrl(),
+  apiUrl: explicitApiUrl?.trim() ? withApiPrefix(explicitApiUrl) : inferDevApiUrl(),
   /** Used only for direct Storage uploads; all data access goes through the API. */
   supabaseUrl: explicitSupabaseUrl ?? '',
   supabaseAnonKey: explicitSupabaseKey ?? '',

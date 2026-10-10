@@ -4,7 +4,6 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './Text';
+import { ToastHost } from './ToastHost';
 import { colors, hitSlop, radius, spacing } from '../../theme';
 
 interface SheetProps {
@@ -75,11 +75,10 @@ export const Sheet = ({
     >
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.wrapper}
-        pointerEvents="box-none"
-      >
+      {/* Padding on Android too: the modal window draws edge-to-edge and is
+          not resized for the keyboard, which left the lower fields of every
+          sheet typing blind underneath it. */}
+      <KeyboardAvoidingView behavior="padding" style={styles.wrapper} pointerEvents="box-none">
         <Animated.View
           style={[
             styles.sheet,
@@ -126,6 +125,11 @@ export const Sheet = ({
           {footer ? <View style={styles.footer}>{footer}</View> : null}
         </Animated.View>
       </KeyboardAvoidingView>
+
+      {/* A modal draws above the app's own toast layer, so feedback raised
+          from a sheet ("Passwords do not match", a failed save) would
+          otherwise be hidden behind it. */}
+      <ToastHost />
     </Modal>
   );
 };
@@ -134,6 +138,9 @@ const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: colors.overlay },
   wrapper: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
+    // Shrinks to the space left above the keyboard rather than running off
+    // the top of the screen; the ScrollView inside takes up the difference.
+    flexShrink: 1,
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xxl,
     borderTopRightRadius: radius.xxl,

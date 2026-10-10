@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../config/supabase';
 import { ApiError } from '../utils/ApiError';
 import { toApiError, unwrap } from '../utils/supabaseError';
-import { buildMeta, toRange } from '../utils/pagination';
+import { buildMeta, pastLastPage, toRange } from '../utils/pagination';
 import { getOrCreateActiveCartId } from './cart.service';
 import type {
   AuthenticatedUser,
@@ -47,6 +47,23 @@ export const checkout = async (
 };
 
 /**
+ * `to` arrives either as a full timestamp (used as given) or as a bare date,
+ * which the validator coerces to that day's midnight. A bare date means the
+ * whole of that day, so the range stops before the next midnight instead —
+ * `<=` midnight left out every sale made on the day itself.
+ */
+const applyUpperBound = <
+  B extends { lt: (column: string, value: string) => B; lte: (column: string, value: string) => B },
+>(
+  builder: B,
+  toDate: string | Date,
+): B => {
+  if (typeof toDate === 'string') return builder.lte('created_at', new Date(toDate).toISOString());
+  const nextDay = new Date(toDate.getTime() + 24 * 60 * 60 * 1000);
+  return builder.lt('created_at', nextDay.toISOString());
+};
+
+/**
  * Staff are scoped to their own sales; admins see the whole store unless they
  * explicitly ask for just their own.
  */
@@ -66,9 +83,10 @@ export const listOrders = async (
   if (status) builder = builder.eq('status', status);
   if (paymentMethod) builder = builder.eq('payment_method', paymentMethod);
   if (fromDate) builder = builder.gte('created_at', new Date(fromDate).toISOString());
-  if (toDate) builder = builder.lte('created_at', new Date(toDate).toISOString());
+  if (toDate) builder = applyUpperBound(builder, toDate);
   if (search) {
-    const term = search.replace(/[,()%\\*]/g, ' ').trim();
+    // Same rule as product search: `"` would also be parsed as PostgREST syntax.
+    const term = search.replace(/[,()%\\*"]/g, ' ').trim();
     if (term) {
       builder = builder.or(`order_number.ilike.%${term}%,customer_name.ilike.%${term}%`);
     }
@@ -79,7 +97,11 @@ export const listOrders = async (
     .order('id', { ascending: false })
     .range(from, to);
 
-  if (error) throw toApiError(error, 'Orders');
+  if (error) {
+    const empty = pastLastPage<OrderSummaryRow>(error, { page, limit });
+    if (empty) return empty;
+    throw toApiError(error, 'Orders');
+  }
 
   return {
     items: (data ?? []) as OrderSummaryRow[],
@@ -98,8 +120,16 @@ export const getOrderById = async (id: string, user: AuthenticatedUser): Promise
   }
 
   const [items, payments] = await Promise.all([
-    supabaseAdmin.from('order_items').select('*').eq('order_id', id).order('created_at'),
-    supabaseAdmin.from('payments').select('*').eq('order_id', id).order('created_at'),
+    // Every line of a sale is written in the same transaction, so `created_at`
+    // ties; the name (then id) keeps the receipt in one order every time it opens.
+    supabaseAdmin
+      .from('order_items')
+      .select('*')
+      .eq('order_id', id)
+      .order('created_at')
+      .order('product_name')
+      .order('id'),
+    supabaseAdmin.from('payments').select('*').eq('order_id', id).order('created_at').order('id'),
   ]);
 
   return {

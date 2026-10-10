@@ -192,14 +192,10 @@ export interface Order extends OrderSummary {
   payments: Payment[];
 }
 
-export interface InventoryMovement {
+/** A stock ledger entry as stored — what a stock change answers with. */
+export interface InventoryMovementRow {
   id: string;
   product_id: string;
-  product_name: string;
-  barcode: string;
-  sku: string;
-  unit: string;
-  image_url: string | null;
   type: MovementType;
   quantity_change: number;
   previous_quantity: number;
@@ -208,8 +204,17 @@ export interface InventoryMovement {
   reference_type: string | null;
   reference_id: string | null;
   created_by: string | null;
-  created_by_name: string | null;
   created_at: string;
+}
+
+/** The same entry joined for display, as the history endpoints return it. */
+export interface InventoryMovement extends InventoryMovementRow {
+  product_name: string;
+  barcode: string;
+  sku: string;
+  unit: string;
+  image_url: string | null;
+  created_by_name: string | null;
 }
 
 export interface InventorySummary {
@@ -306,7 +311,7 @@ export interface StockCountResult {
   previousQuantity: number;
   newQuantity: number;
   /** Null when the count matched what was recorded. */
-  movement: InventoryMovement | null;
+  movement: InventoryMovementRow | null;
   /** True when the server answered a retry with the original result. */
   replayed: boolean;
 }

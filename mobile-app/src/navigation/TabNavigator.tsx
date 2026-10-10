@@ -58,10 +58,14 @@ export const TabNavigator = () => {
           styles.tabBar,
           { height: 58 + insets.bottom, paddingBottom: insets.bottom || spacing.sm },
         ],
-        tabBarLabel: ({ focused, color }) =>
+        // Search fields live on these tabs; on Android the bar would otherwise
+        // ride up on top of the keyboard.
+        tabBarHideOnKeyboard: true,
+        // `children` is the tab's title, so `title: 'Home'` shows as Home.
+        tabBarLabel: ({ focused, color, children }) =>
           route.name === 'Scanner' ? null : (
             <Text variant="caption" style={{ color, fontWeight: focused ? '600' : '500' }}>
-              {route.name}
+              {children}
             </Text>
           ),
         tabBarIcon: ({ focused, color, size }) =>

@@ -157,6 +157,9 @@ export const ChipRow = <T extends string>({
   <ScrollView
     horizontal
     showsHorizontalScrollIndicator={false}
+    // These sit under search fields: without this, the first tap on a chip
+    // while typing only closes the keyboard and the filter is not applied.
+    keyboardShouldPersistTaps="handled"
     style={style}
     contentContainerStyle={[styles.chipRow, contentStyle]}
   >

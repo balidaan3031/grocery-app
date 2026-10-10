@@ -45,7 +45,7 @@ export const authenticate = asyncHandler(async (req: Request, res: Response, nex
   }
 
   if (!profile.is_active) {
-    throw ApiError.forbidden('This account has been deactivated');
+    throw ApiError.accountDeactivated();
   }
 
   const user: AuthenticatedUser = {

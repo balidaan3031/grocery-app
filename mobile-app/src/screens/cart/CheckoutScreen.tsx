@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +32,8 @@ const REFERENCE_METHODS: PaymentMethod[] = ['card', 'upi', 'other'];
 
 export const CheckoutScreen = () => {
   const navigation = useNavigation<Navigation>();
+  // Footers sit on the bottom edge, under the home indicator or nav bar.
+  const insets = useSafeAreaInsets();
 
   const cart = useCartStore((state) => state.cart);
   const isCheckingOut = useCartStore((state) => state.isCheckingOut);
@@ -47,20 +50,27 @@ export const CheckoutScreen = () => {
   const totals = cart?.totals;
   const grossTotal = totals?.total ?? 0;
 
+  // Some locales' decimal pads type a comma.
+  const enteredDiscount = Number(discountText.replace(',', '.').replace(/[^0-9.]/g, ''));
+
   const discount = useMemo(() => {
-    const parsed = Number(discountText.replace(/[^0-9.]/g, ''));
-    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    if (!Number.isFinite(enteredDiscount) || enteredDiscount <= 0) return 0;
     // Capped so the preview can never show a negative amount due; the database
-    // clamps it the same way at checkout.
-    return Math.min(parsed, grossTotal);
-  }, [discountText, grossTotal]);
+    // clamps it the same way at checkout. Rounded to paise, as stored.
+    return Math.round(Math.min(enteredDiscount, grossTotal) * 100) / 100;
+  }, [enteredDiscount, grossTotal]);
 
   const payable = Math.max(grossTotal - discount, 0);
-  const discountExceeds = Number(discountText.replace(/[^0-9.]/g, '')) > grossTotal;
+  const discountExceeds = enteredDiscount > grossTotal;
+  const discountInvalid = discountText.trim() !== '' && !Number.isFinite(enteredDiscount);
 
   const handleConfirm = async () => {
     if (!cart || cart.items.length === 0) {
       toast.error('Cart is empty', 'Add at least one item before checking out.');
+      return;
+    }
+    if (discountInvalid) {
+      toast.error('Check the discount', 'Enter the discount as a number, or leave it empty.');
       return;
     }
 
@@ -76,6 +86,9 @@ export const CheckoutScreen = () => {
 
       navigation.replace('OrderSuccess', { orderId: order.id });
     } catch (error) {
+      // A double tap: the first one is still completing the sale.
+      if (error instanceof AppError && error.code === 'CHECKOUT_IN_PROGRESS') return;
+
       const stock = stockDetailsOf(error);
 
       if (stock) {
@@ -185,8 +198,14 @@ export const CheckoutScreen = () => {
           placeholder="0.00"
           keyboardType="decimal-pad"
           prefix={getCurrencySymbol()}
-          error={discountExceeds ? 'Discount cannot exceed the total; it will be capped.' : undefined}
-          hint={discountExceeds ? undefined : 'Optional flat amount off this sale'}
+          error={
+            discountInvalid
+              ? 'Enter an amount, e.g. 20 or 12.50'
+              : discountExceeds
+                ? 'Discount cannot exceed the total; it will be capped.'
+                : undefined
+          }
+          hint="Optional flat amount off this sale"
           containerStyle={styles.field}
         />
 
@@ -252,7 +271,7 @@ export const CheckoutScreen = () => {
         </Card>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: spacing.lg + insets.bottom }]}>
         <Button
           label={`Complete sale · ${formatCurrency(payable)}`}
           icon="checkmark-circle"

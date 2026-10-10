@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   View,
@@ -72,8 +71,10 @@ export const Screen = ({
   const content = avoidKeyboard ? (
     <KeyboardAvoidingView
       style={styles.flex}
-      // Android resizes the window itself, so only iOS needs padding behaviour.
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // Padding on both platforms: Android draws edge-to-edge, so the window
+      // no longer resizes for the keyboard. Padding is sized to the measured
+      // overlap, so it stays zero wherever the system has already made room.
+      behavior="padding"
     >
       {body}
     </KeyboardAvoidingView>

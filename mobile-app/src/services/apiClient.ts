@@ -86,12 +86,21 @@ const toAppError = (error: unknown): AppError => {
  * start four refreshes; three of them would present an already-rotated refresh
  * token and fail, signing the user out mid-session.
  */
-let refreshPromise: Promise<AuthSession | null> | null = null;
+let refreshPromise: Promise<RefreshOutcome> | null = null;
 
-const refreshSession = async (): Promise<AuthSession | null> => {
+/**
+ * `expired` means the server refused the refresh token, so the session is over.
+ * `unreachable` means no answer — offline, timed out, a server error — and
+ * signing the user out for that would turn every network blip at the till into
+ * a trip back to the login screen.
+ */
+type RefreshOutcome = AuthSession | 'expired' | 'unreachable';
+
+const refreshSession = async (): Promise<RefreshOutcome> => {
   const refreshToken = authBridge?.getSession()?.refreshToken;
-  if (!refreshToken || !authBridge) return null;
+  if (!refreshToken || !authBridge) return 'expired';
 
+  let session: AuthSession | undefined;
   try {
     // A bare axios call: the instance's interceptors would re-enter this path.
     const response = await axios.post<ApiEnvelope<{ session: AuthSession }>>(
@@ -99,20 +108,74 @@ const refreshSession = async (): Promise<AuthSession | null> => {
       { refreshToken },
       { timeout: 15_000, headers: { 'Content-Type': 'application/json' } },
     );
+    session = response.data?.data?.session;
+  } catch (error) {
+    // A refusal is 4xx; a rate limit (429) is "try again later", not "goodbye".
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    return status !== undefined && status >= 400 && status < 500 && status !== 429
+      ? 'expired'
+      : 'unreachable';
+  }
 
-    const session = response.data?.data?.session;
-    if (!session) return null;
+  if (!session) return 'expired';
+  await authBridge.onSessionRefreshed(session);
+  return session;
+};
 
-    await authBridge.onSessionRefreshed(session);
-    return session;
-  } catch {
+/** Joins the refresh already in flight, or starts one. */
+const refreshOnce = (): Promise<RefreshOutcome> => {
+  refreshPromise =
+    refreshPromise ??
+    refreshSession().finally(() => {
+      refreshPromise = null;
+    });
+  return refreshPromise;
+};
+
+/** A token this close to expiry is refreshed before it is handed out. */
+const EXPIRY_MARGIN_MS = 60_000;
+
+/**
+ * The signed-in user's access token, refreshed first if it is about to expire.
+ *
+ * For code that talks to Supabase directly (image uploads). It borrows this
+ * client's session rather than holding a copy of the refresh token: a second
+ * holder would rotate that token on its own schedule, and the app's next
+ * refresh — presenting the now-spent token — would sign the user out.
+ */
+export const getFreshAccessToken = async (): Promise<string | null> => {
+  const session = authBridge?.getSession();
+  if (!session) return null;
+
+  const expiresAtMs = session.expiresAt ? session.expiresAt * 1000 : null;
+  if (expiresAtMs === null || expiresAtMs - Date.now() > EXPIRY_MARGIN_MS) {
+    return session.accessToken;
+  }
+
+  const outcome = await refreshOnce();
+  if (outcome === 'expired') {
+    await authBridge?.onSessionExpired();
     return null;
   }
+  // No answer from the API: the request about to use this would fail on the
+  // network anyway, so let it fail there with the real reason.
+  return outcome === 'unreachable' ? session.accessToken : outcome.accessToken;
 };
+
+/** The account was switched off by an admin: no token will work again. */
+const isDeactivated = (error: unknown): boolean =>
+  axios.isAxiosError(error) &&
+  error.response?.status === 403 &&
+  (error.response.data as ApiEnvelope<unknown> | undefined)?.error?.code === 'ACCOUNT_DEACTIVATED';
 
 api.interceptors.response.use(
   (response) => response,
   async (error: unknown) => {
+    if (isDeactivated(error)) {
+      await authBridge?.onSessionExpired();
+      return Promise.reject(toAppError(error));
+    }
+
     if (!axios.isAxiosError(error) || error.response?.status !== 401) {
       return Promise.reject(toAppError(error));
     }
@@ -127,18 +190,23 @@ api.interceptors.response.use(
 
     original._retried = true;
 
-    refreshPromise = refreshPromise ?? refreshSession().finally(() => {
-      refreshPromise = null;
-    });
+    const outcome = await refreshOnce();
 
-    const session = await refreshPromise;
+    if (outcome === 'unreachable') {
+      return Promise.reject(
+        new AppError({
+          code: 'NETWORK_ERROR',
+          message: 'Cannot reach the server. Check your connection and try again.',
+        }),
+      );
+    }
 
-    if (!session) {
+    if (outcome === 'expired') {
       await authBridge?.onSessionExpired();
       return Promise.reject(toAppError(error));
     }
 
-    original.headers.Authorization = `Bearer ${session.accessToken}`;
+    original.headers.Authorization = `Bearer ${outcome.accessToken}`;
     return api.request(original);
   },
 );

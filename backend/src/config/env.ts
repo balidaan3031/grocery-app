@@ -25,8 +25,13 @@ const envSchema = z.object({
   /**
    * Direct Postgres connection, used only by the migration script — the API
    * itself talks to Supabase over HTTPS. Optional so the server boots without it.
+   * `.env.example` ships it as `DATABASE_URL=`, which arrives as an empty
+   * string: that means "not set", not "an invalid URL" that stops the server.
    */
-  DATABASE_URL: z.string().url().optional(),
+  DATABASE_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
 
   /** Comma-separated list, or `*` to allow any origin (development only). */
   CORS_ORIGINS: z.string().default('*'),

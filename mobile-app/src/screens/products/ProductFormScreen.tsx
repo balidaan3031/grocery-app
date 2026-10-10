@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,6 +10,7 @@ import {
   AppHeader,
   Button,
   Card,
+  ErrorState,
   LoadingState,
   Screen,
   Text,
@@ -58,8 +60,12 @@ const EMPTY_FORM: FormState = {
 
 const UNITS = ['pcs', 'kg', 'g', 'litre', 'ml', 'pack', 'box', 'bottle', 'tray', 'loaf', 'bag'];
 
-/** Derives a starting SKU from the name so the field is rarely typed by hand. */
-const suggestSku = (name: string): string => {
+/**
+ * Derives a starting SKU from the name so the field is rarely typed by hand.
+ * The suffix is fixed per form, so the SKU follows the name as it is typed
+ * instead of reshuffling its digits on every keystroke.
+ */
+const suggestSku = (name: string, suffix: string): string => {
   const words = name.trim().toUpperCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return '';
   const stem = words
@@ -67,11 +73,22 @@ const suggestSku = (name: string): string => {
     .map((word) => word.replace(/[^A-Z0-9]/g, '').slice(0, 4))
     .filter(Boolean)
     .join('-');
-  return stem ? `${stem}-${String(Date.now()).slice(-4)}` : '';
+  return stem ? `${stem}-${suffix}` : '';
 };
+
+/** Decimal keyboards in some locales type a comma; the API wants a dot. */
+const toAmount = (text: string): number => Number(text.trim().replace(',', '.'));
+
+const isWholeNumber = (text: string): boolean => /^\d+$/.test(text.trim());
+
+/** Prices are stored to the paisa; the API refuses a third decimal place. */
+const hasAtMostTwoDecimals = (value: number): boolean =>
+  Math.abs(value * 100 - Math.round(value * 100)) < 1e-6;
 
 export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => {
   const navigation = useNavigation<Navigation>();
+  // Footers sit on the bottom edge, under the home indicator or nav bar.
+  const insets = useSafeAreaInsets();
   const { productId, barcode: scannedBarcode } = route.params ?? {};
   const isEditing = Boolean(productId);
 
@@ -93,10 +110,24 @@ export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => 
     () => (productId ? productsApi.byId(productId) : Promise.resolve(null)),
     [productId],
   );
-  const { data: product, isLoading } = useAsync(fetchProduct, { immediate: Boolean(productId) });
+  const {
+    data: product,
+    isLoading,
+    error: loadError,
+    reload,
+  } = useAsync(fetchProduct, { immediate: Boolean(productId) });
+
+  /**
+   * The SKU follows the name until it is edited by hand. Tracked separately
+   * because the SKU's own value cannot tell the two apart: after the first
+   * letter of the name it already holds a suggested SKU.
+   */
+  const skuEdited = useRef(false);
+  const skuSuffix = useRef(String(Date.now()).slice(-4)).current;
 
   useEffect(() => {
     if (!product) return;
+    skuEdited.current = true;
     setForm({
       name: product.name,
       description: product.description ?? '',
@@ -164,17 +195,32 @@ export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => 
     if (barcodeError) next.barcode = barcodeError === 'Enter a barcode' ? 'A barcode is required' : barcodeError;
     if (!form.sku.trim()) next.sku = 'An SKU is required';
 
-    const selling = Number(form.sellingPrice);
+    const selling = toAmount(form.sellingPrice);
     if (!form.sellingPrice.trim()) next.sellingPrice = 'Set a selling price';
     else if (!Number.isFinite(selling) || selling < 0) next.sellingPrice = 'Enter a valid amount';
+    else if (!hasAtMostTwoDecimals(selling)) next.sellingPrice = 'Use at most 2 decimal places';
 
-    const purchase = Number(form.purchasePrice || '0');
+    const purchase = toAmount(form.purchasePrice || '0');
     if (form.purchasePrice.trim() && (!Number.isFinite(purchase) || purchase < 0)) {
       next.purchasePrice = 'Enter a valid amount';
+    } else if (!hasAtMostTwoDecimals(purchase)) {
+      next.purchasePrice = 'Use at most 2 decimal places';
     }
 
-    const tax = Number(form.taxRate || '0');
+    const tax = toAmount(form.taxRate || '0');
     if (!Number.isFinite(tax) || tax < 0 || tax > 100) next.taxRate = 'Tax must be between 0 and 100';
+
+    // Limits match the API's product validator.
+    if (form.lowStockThreshold.trim() && !isWholeNumber(form.lowStockThreshold)) {
+      next.lowStockThreshold = 'Use a whole number';
+    } else if (Number(form.lowStockThreshold || '0') > 100_000) {
+      next.lowStockThreshold = 'At most 100,000';
+    }
+    if (!isEditing && form.initialQuantity.trim() && !isWholeNumber(form.initialQuantity)) {
+      next.initialQuantity = 'Use a whole number';
+    } else if (!isEditing && Number(form.initialQuantity || '0') > 1_000_000) {
+      next.initialQuantity = 'At most 1,000,000 at a time';
+    }
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -237,9 +283,9 @@ export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => 
       barcode: cleanBarcode(form.barcode),
       sku: form.sku.trim(),
       categoryId: form.categoryId,
-      purchasePrice: Number(form.purchasePrice || '0'),
-      sellingPrice: Number(form.sellingPrice),
-      taxRate: Number(form.taxRate || '0'),
+      purchasePrice: toAmount(form.purchasePrice || '0'),
+      sellingPrice: toAmount(form.sellingPrice),
+      taxRate: toAmount(form.taxRate || '0'),
       unit: form.unit,
       imageUrl: form.imageUrl,
       lowStockThreshold: Number(form.lowStockThreshold || '0'),
@@ -284,7 +330,17 @@ export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => 
     );
   }
 
-  const margin = Number(form.sellingPrice || '0') - Number(form.purchasePrice || '0');
+  // Never show an empty form for an edit: saving it would overwrite the product.
+  if (isEditing && !product) {
+    return (
+      <Screen edges={['top']}>
+        <AppHeader title="Edit product" showBack />
+        <ErrorState message={loadError ?? 'Could not load this product.'} onRetry={reload} />
+      </Screen>
+    );
+  }
+
+  const margin = toAmount(form.sellingPrice || '0') - toAmount(form.purchasePrice || '0');
   const showMargin = Boolean(form.sellingPrice && form.purchasePrice);
   const previewImage = localImage ?? form.imageUrl;
 
@@ -341,12 +397,7 @@ export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => 
           onChangeText={(value) => {
             setField('name', value);
             // Only auto-fill the SKU while creating and while it is untouched.
-            if (!isEditing && !form.sku) setField('sku', suggestSku(value));
-          }}
-          onBlur={() => {
-            if (!isEditing && !form.sku.trim() && form.name.trim()) {
-              setField('sku', suggestSku(form.name));
-            }
+            if (!isEditing && !skuEdited.current) setField('sku', suggestSku(value, skuSuffix));
           }}
           error={errors.name}
           placeholder="Amul Toned Milk 1L"
@@ -378,7 +429,11 @@ export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => 
           label="SKU"
           required
           value={form.sku}
-          onChangeText={(value) => setField('sku', value.toUpperCase())}
+          onChangeText={(value) => {
+            // Cleared by hand means "suggest one again".
+            skuEdited.current = value.trim().length > 0;
+            setField('sku', value.toUpperCase());
+          }}
           error={errors.sku}
           placeholder="DRY-MLK-1L"
           icon="pricetag-outline"
@@ -486,6 +541,7 @@ export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => 
             label="Low stock alert"
             value={form.lowStockThreshold}
             onChangeText={(value) => setField('lowStockThreshold', value)}
+            error={errors.lowStockThreshold}
             placeholder="10"
             keyboardType="number-pad"
             suffix={form.unit}
@@ -524,6 +580,7 @@ export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => 
               label="Quantity on hand"
               value={form.initialQuantity}
               onChangeText={(value) => setField('initialQuantity', value)}
+              error={errors.initialQuantity}
               placeholder="0"
               keyboardType="number-pad"
               suffix={form.unit}
@@ -535,7 +592,7 @@ export const ProductFormScreen = ({ route }: RootScreenProps<'ProductForm'>) => 
         ) : null}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: spacing.base + insets.bottom }]}>
         <Button
           label={isEditing ? 'Save changes' : 'Add product'}
           icon="checkmark"

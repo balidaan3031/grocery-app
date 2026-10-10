@@ -2,9 +2,8 @@ import { create } from 'zustand';
 import { authApi, configApi } from '../services/api';
 import { registerAuthBridge } from '../services/apiClient';
 import { STORAGE_KEYS, secureStorage } from '../services/secureStorage';
-import { authoriseStorage } from '../services/imageUpload';
 import { configureCurrency } from '../utils/format';
-import { messageOf } from '../utils/errors';
+import { AppError, messageOf } from '../utils/errors';
 import type { AppConfig, AuthSession, AuthUser } from '../types';
 
 interface AuthState {
@@ -65,40 +64,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * session cleared.
    */
   bootstrap: async () => {
-    const [rawSession, rawUser] = await Promise.all([
-      secureStorage.get(STORAGE_KEYS.session),
-      secureStorage.get(STORAGE_KEYS.user),
-    ]);
+    try {
+      const [rawSession, rawUser] = await Promise.all([
+        secureStorage.get(STORAGE_KEYS.session),
+        secureStorage.get(STORAGE_KEYS.user),
+      ]);
 
-    const session = readJson<AuthSession>(rawSession);
-    const cachedUser = readJson<AuthUser>(rawUser);
+      const session = readJson<AuthSession>(rawSession);
+      const cachedUser = readJson<AuthUser>(rawUser);
 
-    if (session && cachedUser) {
-      set({ session, user: cachedUser });
-      void authoriseStorage(session);
-    }
-
-    // Store config is public and cheap; failure here must not block sign-in.
-    void configApi
-      .get()
-      .then((config) => {
-        configureCurrency(config.currencySymbol, config.currencyCode);
-        set({ config });
-      })
-      .catch(() => undefined);
-
-    if (session) {
-      try {
-        const user = await authApi.me();
-        set({ user });
-        await persistSession(get().session, user);
-      } catch {
-        await persistSession(null, null);
-        set({ user: null, session: null });
+      if (session && cachedUser) {
+        set({ session, user: cachedUser });
       }
-    }
 
-    set({ isBootstrapping: false });
+      // Store config is public and cheap; failure here must not block sign-in.
+      void configApi
+        .get()
+        .then((config) => {
+          configureCurrency(config.currencySymbol, config.currencyCode);
+          set({ config });
+        })
+        .catch(() => undefined);
+
+      if (session && cachedUser) {
+        try {
+          const user = await authApi.me();
+          set({ user });
+          await persistSession(get().session, user);
+        } catch (error) {
+          // A refused or revoked session has already been cleared by the API
+          // client. Anything else — no signal, the API waking up — keeps the
+          // cached user, so a flaky connection at opening time does not sign
+          // the till out.
+          if (error instanceof AppError && (error.isAuthError || error.status === 403)) {
+            await persistSession(null, null);
+            set({ user: null, session: null });
+          }
+        }
+      } else if (session || cachedUser) {
+        // Half a stored session cannot be used; start clean.
+        await persistSession(null, null);
+      }
+    } finally {
+      // Whatever happened above, never leave the app on the splash screen.
+      set({ isBootstrapping: false });
+    }
   },
 
   login: async (email, password) => {
@@ -106,7 +116,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { user, session } = await authApi.login(email.trim(), password);
       await persistSession(session, user);
-      await authoriseStorage(session);
       set({ user, session, isSigningIn: false });
       return true;
     } catch (error) {
@@ -159,7 +168,6 @@ registerAuthBridge({
     useAuthStore.setState({ session });
     const user = useAuthStore.getState().user;
     if (user) await persistSession(session, user);
-    await authoriseStorage(session);
   },
   onSessionExpired: async () => {
     await persistSession(null, null);

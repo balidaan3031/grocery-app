@@ -48,7 +48,8 @@ Clients should attempt one `POST /auth/refresh` and retry.
 |------|------|---------|
 | `BAD_REQUEST` | 400 | Malformed request |
 | `UNAUTHORIZED` | 401 | Missing / invalid / expired token |
-| `FORBIDDEN` | 403 | Authenticated but not permitted (wrong role, or deactivated) |
+| `FORBIDDEN` | 403 | Authenticated but not permitted (wrong role) |
+| `ACCOUNT_DEACTIVATED` | 403 | The account has been deactivated; the client should sign out |
 | `NOT_FOUND` | 404 | Resource does not exist |
 | `PRODUCT_NOT_FOUND` | 404 | Barcode lookup missed — carries the barcode in `details` |
 | `ROUTE_NOT_FOUND` | 404 | No such endpoint |
@@ -58,7 +59,9 @@ Clients should attempt one `POST /auth/refresh` and retry.
 | `IDEMPOTENCY_KEY_REUSED` | 409 | An idempotency key was sent again with a different stock change |
 | `VALIDATION_ERROR` | 422 | Body/query/params failed validation — `details` is a `{ field, message }[]` |
 | `RATE_LIMITED` | 429 | Too many requests |
+| `INVALID_CURRENT_PASSWORD` | 400 | `POST /auth/me/password` — the current password is wrong |
 | `INTERNAL_ERROR` | 500 | Unexpected failure (details withheld in production) |
+| `SCHEMA_OUT_OF_DATE` | 500 | The database is missing a migration, or PostgREST's schema cache predates it |
 
 ### Pagination
 
@@ -170,7 +173,7 @@ Staff see their own orders in `recentOrders`; admins see the whole store.
 
 A wrong password and an unknown email both return `401 UNAUTHORIZED` with the
 same message — distinguishing them would turn the endpoint into an account
-enumerator. A deactivated account returns `403 FORBIDDEN`.
+enumerator. A deactivated account returns `403 ACCOUNT_DEACTIVATED`.
 
 ### `POST /auth/refresh`
 
@@ -204,7 +207,8 @@ At least one field is required. Returns the updated user.
 ```
 
 Re-authenticates with the current password first, so a stolen access token alone
-cannot lock the owner out. Returns `204`.
+cannot lock the owner out. Returns `204`, or `400 INVALID_CURRENT_PASSWORD` —
+not 401, which a client would read as an expired session.
 
 ### `GET /auth/users` — **admin**
 
@@ -633,6 +637,9 @@ removed.
 
 **Query:** `page`, `limit`, `search`, `categoryId`, `stockStatus`,
 `sortBy` (`name` \| `quantity` \| `updated_at`), `sortOrder`
+
+`updated_at` sorts by when the product's **stock** last changed, not when its
+catalogue entry was edited (`inventory_levels`, migration 0010).
 
 Returns `Product[]` — the same shape as `GET /products`, so the UI renders one
 row component everywhere.

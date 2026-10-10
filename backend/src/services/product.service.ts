@@ -2,7 +2,7 @@ import { supabaseAdmin } from '../config/supabase';
 import { logger } from '../config/logger';
 import { ApiError } from '../utils/ApiError';
 import { toApiError, unwrap } from '../utils/supabaseError';
-import { buildMeta, toRange } from '../utils/pagination';
+import { buildMeta, pastLastPage, toRange } from '../utils/pagination';
 import { barcodeKey, barcodeVariants } from '../utils/barcode';
 import { adjustStock } from './inventory.service';
 import type { Database, Paginated, Product } from '../types';
@@ -53,7 +53,11 @@ export const listProducts = async (query: ListProductsQuery): Promise<Paginated<
     .order('id', { ascending: true }) // stable tiebreak so pages never overlap
     .range(from, to);
 
-  if (error) throw toApiError(error, 'Products');
+  if (error) {
+    const empty = pastLastPage<Product>(error, { page, limit });
+    if (empty) return empty;
+    throw toApiError(error, 'Products');
+  }
 
   return {
     items: (data ?? []) as Product[],

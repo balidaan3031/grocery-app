@@ -50,20 +50,30 @@ export const useAsync = <T>(
     };
   }, []);
 
+  /**
+   * Each run claims a token and only the newest may write state. A screen that
+   * loads on mount and refetches on focus starts two requests at once; without
+   * this, whichever landed last won, and the refresh starting cleared the
+   * loading flag so the screen rendered empty in between.
+   */
+  const runToken = useRef(0);
+
   const run = useCallback(async (mode: 'load' | 'refresh') => {
-    setState((current) => ({
-      ...current,
-      isLoading: mode === 'load',
-      isRefreshing: mode === 'refresh',
-      error: null,
-    }));
+    const token = (runToken.current += 1);
+
+    setState((current) => {
+      // Nothing on screen yet means a refresh is really a first load: show the
+      // loading state, not an empty screen under a pull-to-refresh spinner.
+      const isLoading = mode === 'load' || current.data === null;
+      return { ...current, isLoading, isRefreshing: !isLoading, error: null };
+    });
 
     try {
       const data = await fetcherRef.current();
-      if (!isMounted.current) return;
+      if (!isMounted.current || token !== runToken.current) return;
       setState({ data, isLoading: false, isRefreshing: false, error: null });
     } catch (error) {
-      if (!isMounted.current) return;
+      if (!isMounted.current || token !== runToken.current) return;
       setState((current) => ({
         ...current,
         isLoading: false,
@@ -81,9 +91,15 @@ export const useAsync = <T>(
   }, [immediate, run]);
 
   // Data that another screen can change (stock, orders) should be current when
-  // the user navigates back to it.
+  // the user navigates back to it. The first focus is the mount, which the
+  // load above already covers.
+  const skipFocus = useRef(immediate);
   useFocusEffect(
     useCallback(() => {
+      if (skipFocus.current) {
+        skipFocus.current = false;
+        return;
+      }
       if (refetchOnFocus) void run('refresh');
     }, [refetchOnFocus, run]),
   );

@@ -1,5 +1,6 @@
 {
-  "outputDirectory": "dist",
+  "buildCommand": "npm run typecheck",
+  "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/(.*)",

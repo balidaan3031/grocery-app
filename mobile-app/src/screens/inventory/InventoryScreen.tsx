@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   AppHeader,
@@ -52,7 +52,9 @@ export const InventoryScreen = () => {
   const debouncedSearch = useDebounce(search, 350);
 
   const fetchSummary = useCallback(() => inventoryApi.summary(), []);
-  const { data: summary, refresh: refreshSummary } = useAsync(fetchSummary);
+  // Stock changes on almost every other screen, so both the summary and the
+  // list are stale on return.
+  const { data: summary, refresh: refreshSummary } = useAsync(fetchSummary, { refetchOnFocus: true });
 
   const fetchPage = useCallback(
     (page: number) =>
@@ -70,16 +72,7 @@ export const InventoryScreen = () => {
   );
 
   const { items, meta, isLoading, isRefreshing, isLoadingMore, error, reload, refresh, loadMore } =
-    usePaginatedList<Product>(fetchPage);
-
-  // Stock changes on almost every other screen, so this list is always stale
-  // on return.
-  useFocusEffect(
-    useCallback(() => {
-      void refresh();
-      void refreshSummary();
-    }, [refresh, refreshSummary]),
-  );
+    usePaginatedList<Product>(fetchPage, { refetchOnFocus: true });
 
   const handleRefresh = () => {
     void refresh();

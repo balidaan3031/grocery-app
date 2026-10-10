@@ -2,7 +2,7 @@ import 'react-native-url-polyfill/auto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { env, hasSupabaseStorage } from '../config/env';
 import { AppError } from '../utils/errors';
-import type { AuthSession } from '../types';
+import { getFreshAccessToken } from './apiClient';
 
 /**
  * Product image uploads.
@@ -24,23 +24,17 @@ const getClient = (): SupabaseClient => {
     });
   }
 
+  // Storage authorises with the signed-in user's own JWT, so the upload runs as
+  // that member of staff and the policy check is real rather than a formality.
+  // The token is borrowed from the API client for each request rather than
+  // handed over as a session: a client holding the refresh token refreshes it
+  // on its own near expiry, spending the token the app still holds, and the
+  // app's next refresh would then sign the user out.
   client ??= createClient(env.supabaseUrl, env.supabaseAnonKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    accessToken: getFreshAccessToken,
   });
 
   return client;
-};
-
-/**
- * Storage authorises with the user's own JWT, so the upload runs as that member
- * of staff and the policy check is real rather than a formality.
- */
-export const authoriseStorage = async (session: AuthSession | null): Promise<void> => {
-  if (!hasSupabaseStorage || !session) return;
-  await getClient().auth.setSession({
-    access_token: session.accessToken,
-    refresh_token: session.refreshToken,
-  });
 };
 
 const extensionOf = (uri: string): string => {

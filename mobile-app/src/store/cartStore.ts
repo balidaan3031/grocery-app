@@ -184,6 +184,8 @@ export const useCartStore = create<CartState>((set, get) => ({
       set({ cart, error: null });
     } catch (error) {
       set({ cart: previous, error: messageOf(error, 'Could not remove that item') });
+      // Rethrown so the screen can say why the row came back.
+      throw error;
     } finally {
       set({ pendingItemIds: get().pendingItemIds.filter((id) => id !== itemId) });
     }
@@ -199,10 +201,16 @@ export const useCartStore = create<CartState>((set, get) => ({
     } catch (error) {
       if (previous) set({ cart: previous });
       set({ error: messageOf(error, 'Could not clear the cart') });
+      throw error;
     }
   },
 
   checkout: async (input) => {
+    // A second tap before the button re-renders as busy must not ring the
+    // sale up twice.
+    if (get().isCheckingOut) {
+      throw new AppError({ code: 'CHECKOUT_IN_PROGRESS', message: 'This sale is already being completed.' });
+    }
     set({ isCheckingOut: true, error: null });
     try {
       const order = await ordersApi.checkout(input);

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -19,6 +20,7 @@ import { useCartStore } from '../../store/cartStore';
 import { toast } from '../../store/uiStore';
 import { colors, radius, shadows, spacing, typography } from '../../theme';
 import { formatCurrency, pluralise } from '../../utils/format';
+import { messageOf, stockDetailsOf } from '../../utils/errors';
 import type { CartItem } from '../../types';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -26,6 +28,8 @@ type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
 export const CartScreen = () => {
   const navigation = useNavigation<Navigation>();
+  // Footers sit on the bottom edge, under the home indicator or nav bar.
+  const insets = useSafeAreaInsets();
 
   const cart = useCartStore((state) => state.cart);
   const isLoading = useCartStore((state) => state.isLoading);
@@ -44,6 +48,14 @@ export const CartScreen = () => {
     setIsRefreshing(false);
   }, [load]);
 
+  // Stock limits on each line come from the last fetch; other tills sell from
+  // the same shelves, so pick up the current figures whenever the cart opens.
+  useFocusEffect(
+    useCallback(() => {
+      void load({ silent: true });
+    }, [load]),
+  );
+
   const handleClear = () => {
     Alert.alert('Clear cart?', 'This removes every item from the current sale.', [
       { text: 'Keep items', style: 'cancel' },
@@ -51,8 +63,9 @@ export const CartScreen = () => {
         text: 'Clear cart',
         style: 'destructive',
         onPress: () => {
-          void clear();
-          toast.info('Cart cleared');
+          clear()
+            .then(() => toast.info('Cart cleared'))
+            .catch((error: unknown) => toast.error('Could not clear the cart', messageOf(error)));
         },
       },
     ]);
@@ -61,7 +74,17 @@ export const CartScreen = () => {
   const handleQuantityError = (error: unknown) => {
     // The store already rolled the optimistic change back; this is only about
     // telling the cashier why the shelf disagreed.
-    if (error instanceof Error) toast.error('Cannot add more', error.message);
+    const stock = stockDetailsOf(error);
+    toast.error(
+      stock ? 'Not enough stock' : 'Could not update quantity',
+      stock ? `Only ${stock.available} of ${stock.productName} left.` : messageOf(error),
+    );
+  };
+
+  const handleRemove = (itemId: string) => {
+    removeItem(itemId).catch((error: unknown) =>
+      toast.error('Could not remove the item', messageOf(error)),
+    );
   };
 
   const items = cart?.items ?? [];
@@ -103,7 +126,7 @@ export const CartScreen = () => {
               busy={isPending}
               max={item.product.quantity}
               removeAtMin
-              onRemove={() => void removeItem(item.id)}
+              onRemove={() => handleRemove(item.id)}
               onIncrement={() => {
                 if (atStockLimit) {
                   toast.warning(
@@ -190,7 +213,7 @@ export const CartScreen = () => {
           />
 
           {/* Summary docked above the fold: the total must never require a scroll */}
-          <View style={styles.summary}>
+          <View style={[styles.summary, { paddingBottom: spacing.lg + insets.bottom }]}>
             <View style={styles.summaryRow}>
               <Text variant="small" tone="secondary">
                 Subtotal ({pluralise(totals?.distinctItems ?? 0, 'line')})

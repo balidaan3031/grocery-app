@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { Button, Card, Divider, LoadingState, Text } from '../../components/ui';
+import { Button, Card, Divider, ErrorState, LoadingState, Text } from '../../components/ui';
 import { useAsync } from '../../hooks/useAsync';
 import { ordersApi } from '../../services/api';
 import { colors, radius, shadows, spacing, typography } from '../../theme';
@@ -18,7 +18,7 @@ export const OrderSuccessScreen = ({ route }: RootScreenProps<'OrderSuccess'>) =
   const { orderId } = route.params;
 
   const fetchOrder = useCallback(() => ordersApi.byId(orderId), [orderId]);
-  const { data: order, isLoading } = useAsync(fetchOrder);
+  const { data: order, isLoading, error, reload } = useAsync(fetchOrder);
 
   const pop = useRef(new Animated.Value(0)).current;
   const ring = useRef(new Animated.Value(0)).current;
@@ -55,6 +55,23 @@ export const OrderSuccessScreen = ({ route }: RootScreenProps<'OrderSuccess'>) =
     return (
       <SafeAreaView style={styles.screen}>
         <LoadingState label="Finalising order…" />
+      </SafeAreaView>
+    );
+  }
+
+  // The sale went through; only the receipt failed to load. Say so, rather
+  // than presenting a ₹0.00 receipt.
+  if (error && !order) {
+    return (
+      <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+        <ErrorState
+          title="Sale completed"
+          message={`The receipt could not be loaded: ${error}`}
+          onRetry={reload}
+        />
+        <View style={styles.footer}>
+          <Button label="New sale" icon="scan" size="lg" fullWidth onPress={startNewSale} />
+        </View>
       </SafeAreaView>
     );
   }

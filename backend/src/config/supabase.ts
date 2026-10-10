@@ -38,7 +38,19 @@ export type AppSupabaseClient = ReturnType<typeof createTypedClient>;
 export const supabaseAdmin: AppSupabaseClient = createTypedClient(env.SUPABASE_SERVICE_ROLE_KEY);
 
 /**
- * Anon-key client, used only for the auth handshake (password sign-in, refresh,
- * sign-out). It holds no elevated privileges.
+ * Anon-key client for verifying bearer tokens (`auth.getUser(token)`), which
+ * reads nothing from the client's own state. It holds no elevated privileges.
  */
 export const supabaseAuth: AppSupabaseClient = createTypedClient(env.SUPABASE_ANON_KEY);
+
+/**
+ * A fresh anon-key client for one sign-in or refresh.
+ *
+ * The auth client is stateful even with `persistSession: false`: it keeps the
+ * last session in memory and shares one in-flight refresh between all callers,
+ * whatever token each passed. One client shared across requests therefore
+ * handed a till that refreshed alongside another till that other user's
+ * session, and spent the last signed-in user's refresh token on someone else's
+ * refresh. A client per exchange has nobody else's state to leak.
+ */
+export const createAuthClient = (): AppSupabaseClient => createTypedClient(env.SUPABASE_ANON_KEY);

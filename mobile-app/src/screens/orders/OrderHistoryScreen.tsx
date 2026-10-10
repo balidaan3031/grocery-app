@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   AppHeader,
@@ -73,14 +73,9 @@ export const OrderHistoryScreen = () => {
     [debouncedSearch, paymentMethod, onlyMine, isAdmin],
   );
 
+  // New sales are rung up on other screens; refresh on return.
   const { items, meta, isLoading, isRefreshing, isLoadingMore, error, reload, refresh, loadMore } =
-    usePaginatedList<OrderSummary>(fetchPage);
-
-  useFocusEffect(
-    useCallback(() => {
-      void refresh();
-    }, [refresh]),
-  );
+    usePaginatedList<OrderSummary>(fetchPage, { refetchOnFocus: true });
 
   /** Takings for the orders currently loaded — a running read of the shift. */
   const loadedTotal = useMemo(

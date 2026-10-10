@@ -232,7 +232,7 @@ export const CategoriesScreen = () => {
 
   if (!isAdmin) {
     return (
-      <Screen edges={['top']}>
+      <Screen edges={['top', 'bottom']}>
         <AppHeader title="Categories" showBack />
         <EmptyState
           icon="lock-closed-outline"
@@ -277,7 +277,7 @@ export const CategoriesScreen = () => {
   );
 
   return (
-    <Screen edges={['top']}>
+    <Screen edges={['top', 'bottom']}>
       <AppHeader
         title="Categories"
         subtitle={data ? pluralise(categories.length, 'category', 'categories') : undefined}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { messageOf } from '../utils/errors';
 import type { PaginationMeta } from '../types';
 
@@ -34,9 +35,9 @@ export interface UsePaginatedListResult<T> {
  */
 export const usePaginatedList = <T extends { id: string }>(
   fetchPage: (page: number) => Promise<Page<T>>,
-  options: { immediate?: boolean } = {},
+  options: { immediate?: boolean; refetchOnFocus?: boolean } = {},
 ): UsePaginatedListResult<T> => {
-  const { immediate = true } = options;
+  const { immediate = true, refetchOnFocus = false } = options;
 
   const [items, setItems] = useState<T[]>([]);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
@@ -85,12 +86,16 @@ export const usePaginatedList = <T extends { id: string }>(
       setError(messageOf(caught));
       if (mode !== 'more') setItems([]);
     } finally {
-      if (isMounted.current && token === runToken.current) {
-        setIsLoading(false);
-        setIsRefreshing(false);
-        setIsLoadingMore(false);
+      // A superseded run must not touch the flags, including `inFlight`: the
+      // newer one is still going.
+      if (token === runToken.current) {
+        inFlight.current = false;
+        if (isMounted.current) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+          setIsLoadingMore(false);
+        }
       }
-      inFlight.current = false;
     }
   }, []);
 
@@ -100,6 +105,19 @@ export const usePaginatedList = <T extends { id: string }>(
 
   const reload = useCallback(() => load(1, 'load'), [load]);
   const refresh = useCallback(() => load(1, 'refresh'), [load]);
+
+  // Lists that other screens change (stock, orders, the catalogue) refresh
+  // when the user comes back. The first focus is the mount, already loading.
+  const skipFocus = useRef(immediate);
+  useFocusEffect(
+    useCallback(() => {
+      if (skipFocus.current) {
+        skipFocus.current = false;
+        return;
+      }
+      if (refetchOnFocus) void refresh();
+    }, [refetchOnFocus, refresh]),
+  );
 
   const loadMore = useCallback(() => {
     if (!meta?.hasMore || isLoadingMore || isLoading || isRefreshing) return;

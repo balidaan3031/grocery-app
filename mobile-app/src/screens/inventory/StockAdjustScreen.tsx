@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -69,6 +70,8 @@ const toDigits = (text: string): string => text.replace(/\D/g, '').replace(/^0+(
 
 export const StockAdjustScreen = ({ route }: RootScreenProps<'StockAdjust'>) => {
   const navigation = useNavigation<Navigation>();
+  // Footers sit on the bottom edge, under the home indicator or nav bar.
+  const insets = useSafeAreaInsets();
   const { productId } = route.params;
 
   const [direction, setDirection] = useState<Direction>('add');
@@ -410,7 +413,7 @@ export const StockAdjustScreen = ({ route }: RootScreenProps<'StockAdjust'>) => 
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: spacing.base + insets.bottom }]}>
         <View style={styles.footerSummary}>
           <StockBadge status={product.stock_status} quantity={current} unit={product.unit} size="sm" />
           {canSubmit ? (

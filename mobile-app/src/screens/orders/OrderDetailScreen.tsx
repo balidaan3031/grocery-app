@@ -39,7 +39,7 @@ export const OrderDetailScreen = ({ route }: RootScreenProps<'OrderDetail'>) => 
 
   if (isLoading && !order) {
     return (
-      <Screen edges={['top']}>
+      <Screen edges={['top', 'bottom']}>
         <AppHeader title="Order" showBack />
         <LoadingState />
       </Screen>
@@ -48,7 +48,7 @@ export const OrderDetailScreen = ({ route }: RootScreenProps<'OrderDetail'>) => 
 
   if (error && !order) {
     return (
-      <Screen edges={['top']}>
+      <Screen edges={['top', 'bottom']}>
         <AppHeader title="Order" showBack />
         <ErrorState message={error} onRetry={reload} />
       </Screen>
@@ -58,7 +58,7 @@ export const OrderDetailScreen = ({ route }: RootScreenProps<'OrderDetail'>) => 
   if (!order) return null;
 
   return (
-    <Screen edges={['top']}>
+    <Screen edges={['top', 'bottom']}>
       <AppHeader title={order.order_number} subtitle={formatDateTime(order.created_at)} showBack />
 
       <ScrollView

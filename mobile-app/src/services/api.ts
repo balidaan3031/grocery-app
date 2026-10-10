@@ -9,6 +9,7 @@ import type {
   CheckoutInput,
   Dashboard,
   InventoryMovement,
+  InventoryMovementRow,
   InventorySummary,
   LoginResult,
   Order,
@@ -150,7 +151,7 @@ export const inventoryApi = {
   lowStock: (limit = 20) => get<Product[]>('/inventory/low-stock', { limit }),
 
   adjust: (productId: string, input: StockAdjustInput) =>
-    post<InventoryMovement>(`/inventory/${productId}/adjust`, input),
+    post<InventoryMovementRow>(`/inventory/${productId}/adjust`, input),
 
   /** Sets stock to a physical count; the server computes the change atomically. */
   count: (productId: string, input: StockCountInput) =>

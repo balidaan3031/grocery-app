@@ -79,7 +79,7 @@ export const MovementHistoryScreen = ({ route }: RootScreenProps<'MovementHistor
   };
 
   return (
-    <Screen edges={['top']}>
+    <Screen edges={['top', 'bottom']}>
       <AppHeader
         title="Stock history"
         subtitle={

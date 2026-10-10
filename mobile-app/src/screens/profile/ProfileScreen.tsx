@@ -71,9 +71,29 @@ export const ProfileScreen = () => {
     }
   };
 
+  const dismissPassword = () => {
+    setPasswordOpen(false);
+    // Passwords should not sit in memory, or reappear next time the sheet opens.
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const closePassword = () => {
+    if (!isSaving) dismissPassword();
+  };
+
   const handleChangePassword = async () => {
+    if (!currentPassword) {
+      toast.error('Enter your current password');
+      return;
+    }
     if (newPassword.length < 8) {
       toast.error('Password too short', 'Use at least 8 characters.');
+      return;
+    }
+    if (newPassword.length > 72) {
+      toast.error('Password too long', 'Use 72 characters or fewer.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -84,10 +104,7 @@ export const ProfileScreen = () => {
     setIsSaving(true);
     try {
       await authApi.changePassword(currentPassword, newPassword);
-      setPasswordOpen(false);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+      dismissPassword();
       toast.success('Password changed');
     } catch (error) {
       toast.error('Could not change password', messageOf(error));
@@ -111,7 +128,7 @@ export const ProfileScreen = () => {
   };
 
   return (
-    <Screen edges={['top']}>
+    <Screen edges={['top', 'bottom']}>
       <AppHeader title="Profile" showBack />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -251,7 +268,7 @@ export const ProfileScreen = () => {
 
       <Sheet
         visible={editOpen}
-        onClose={() => setEditOpen(false)}
+        onClose={() => !isSaving && setEditOpen(false)}
         title="Edit profile"
         subtitle="Your name appears on every order you ring up"
         footer={
@@ -259,6 +276,7 @@ export const ProfileScreen = () => {
             <Button
               label="Cancel"
               variant="secondary"
+              disabled={isSaving}
               onPress={() => setEditOpen(false)}
               style={styles.sheetButton}
             />
@@ -292,7 +310,7 @@ export const ProfileScreen = () => {
 
       <Sheet
         visible={passwordOpen}
-        onClose={() => setPasswordOpen(false)}
+        onClose={closePassword}
         title="Change password"
         subtitle="You will stay signed in on this device"
         footer={
@@ -300,7 +318,8 @@ export const ProfileScreen = () => {
             <Button
               label="Cancel"
               variant="secondary"
-              onPress={() => setPasswordOpen(false)}
+              disabled={isSaving}
+              onPress={closePassword}
               style={styles.sheetButton}
             />
             <Button

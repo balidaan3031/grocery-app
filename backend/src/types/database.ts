@@ -178,6 +178,11 @@ export type ProductWithStockRow = Omit<ProductRow, 'barcode_key'> & {
   margin: number;
 };
 
+/** public.inventory_levels (0010) — the same, plus when the stock last changed. */
+export type InventoryLevelRow = ProductWithStockRow & {
+  stock_updated_at: string | null;
+};
+
 /** public.inventory_movement_details */
 export type InventoryMovementDetailRow = InventoryMovementRow & {
   product_name: string;
@@ -234,6 +239,7 @@ export type Database = {
     Views: {
       products_with_stock: View<ProductWithStockRow>;
       low_stock_products: View<ProductWithStockRow>;
+      inventory_levels: View<InventoryLevelRow>;
       inventory_movement_details: View<InventoryMovementDetailRow>;
       order_summaries: View<OrderSummaryRow>;
     };

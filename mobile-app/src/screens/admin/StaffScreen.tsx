@@ -234,7 +234,7 @@ export const StaffScreen = () => {
 
   if (!isAdmin) {
     return (
-      <Screen edges={['top']}>
+      <Screen edges={['top', 'bottom']}>
         <AppHeader title="Staff accounts" showBack />
         <EmptyState
           icon="lock-closed-outline"
@@ -303,7 +303,7 @@ export const StaffScreen = () => {
         : target?.email;
 
   return (
-    <Screen edges={['top']}>
+    <Screen edges={['top', 'bottom']}>
       <AppHeader
         title="Staff accounts"
         subtitle={data ? `${pluralise(accounts.length, 'account')} · ${activeCount} active` : undefined}

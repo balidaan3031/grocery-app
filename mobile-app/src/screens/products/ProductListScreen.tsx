@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -62,7 +62,15 @@ export const ProductListScreen = () => {
   const debouncedSearch = useDebounce(search, 350);
 
   const fetchCategories = useCallback(() => categoriesApi.list({ withCounts: true }), []);
-  const { data: categories } = useAsync(fetchCategories);
+  const { data: categories } = useAsync(fetchCategories, { refetchOnFocus: true });
+
+  // A category retired elsewhere drops out of the chips; a filter on it would
+  // then be invisible and impossible to clear.
+  useEffect(() => {
+    if (categoryId && categories && !categories.some((category) => category.id === categoryId)) {
+      setCategoryId(null);
+    }
+  }, [categories, categoryId]);
 
   /**
    * Memoised on the filter values, and nothing else.
@@ -86,15 +94,9 @@ export const ProductListScreen = () => {
     [debouncedSearch, categoryId, stockStatus, inactiveView],
   );
 
-  const { items, meta, isLoading, isRefreshing, isLoadingMore, error, reload, refresh, loadMore } =
-    usePaginatedList<Product>(fetchPage);
-
   // Prices, stock and new products all change elsewhere; refresh on return.
-  useFocusEffect(
-    useCallback(() => {
-      void refresh();
-    }, [refresh]),
-  );
+  const { items, meta, isLoading, isRefreshing, isLoadingMore, error, reload, refresh, loadMore } =
+    usePaginatedList<Product>(fetchPage, { refetchOnFocus: true });
 
   const categoryOptions = useMemo<ChipOption<string>[]>(
     () =>
@@ -271,7 +273,7 @@ export const ProductListScreen = () => {
           )}
           contentContainerStyle={[styles.list, items.length === 0 && styles.listEmpty]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={renderEmpty}
+          ListEmptyComponent={renderEmpty()}
           refreshing={isRefreshing}
           onRefresh={refresh}
           onEndReached={loadMore}

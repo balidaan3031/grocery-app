@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../config/supabase';
 import { toApiError } from '../utils/supabaseError';
-import { buildMeta, toRange } from '../utils/pagination';
+import { buildMeta, pastLastPage, toRange } from '../utils/pagination';
 import type {
   InventoryCountResult,
   InventoryMovement,
@@ -82,8 +82,14 @@ export const listInventory = async (query: ListInventoryQuery): Promise<Paginate
   const { page, limit, search, categoryId, stockStatus, sortBy, sortOrder } = query;
   const { from, to } = toRange({ page, limit });
 
+  // "Recent" means stock that changed recently: the inventory row's timestamp
+  // from inventory_levels (0010), not the product's own `updated_at`, which
+  // only moves when the catalogue entry is edited. The other sorts read the
+  // base view, so they keep working on a database 0010 has not reached yet.
+  const recent = sortBy === 'updated_at';
+
   let builder = supabaseAdmin
-    .from('products_with_stock')
+    .from(recent ? 'inventory_levels' : 'products_with_stock')
     .select('*', { count: 'exact' })
     .eq('is_active', true);
 
@@ -98,11 +104,15 @@ export const listInventory = async (query: ListInventoryQuery): Promise<Paginate
   }
 
   const { data, error, count } = await builder
-    .order(sortBy, { ascending: sortOrder === 'asc' })
+    .order(recent ? 'stock_updated_at' : sortBy, { ascending: sortOrder === 'asc', nullsFirst: false })
     .order('id', { ascending: true })
     .range(from, to);
 
-  if (error) throw toApiError(error, 'Inventory');
+  if (error) {
+    const empty = pastLastPage<Product>(error, { page, limit });
+    if (empty) return empty;
+    throw toApiError(error, 'Inventory');
+  }
 
   return { items: (data ?? []) as Product[], meta: buildMeta({ page, limit }, count ?? 0) };
 };
@@ -138,7 +148,11 @@ export const listMovements = async (
     .order('id', { ascending: false })
     .range(from, to);
 
-  if (error) throw toApiError(error, 'Inventory movements');
+  if (error) {
+    const empty = pastLastPage<InventoryMovement>(error, { page, limit });
+    if (empty) return empty;
+    throw toApiError(error, 'Inventory movements');
+  }
 
   return {
     items: (data ?? []) as InventoryMovement[],

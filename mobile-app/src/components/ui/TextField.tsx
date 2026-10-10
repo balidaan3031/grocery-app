@@ -79,6 +79,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(
         <View
           style={[
             styles.field,
+            rest.multiline && styles.fieldMultiline,
             { borderColor, backgroundColor: isFocused ? colors.surface : colors.surfaceAlt },
             isFocused && styles.focusRing,
           ]}
@@ -88,7 +89,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(
               name={icon}
               size={18}
               color={isFocused ? colors.primary : colors.textMuted}
-              style={styles.icon}
+              style={[styles.icon, rest.multiline && styles.iconMultiline]}
             />
           ) : null}
 
@@ -100,7 +101,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(
 
           <TextInput
             ref={ref}
-            style={styles.input}
+            style={[styles.input, rest.multiline && styles.inputMultiline]}
             placeholderTextColor={colors.textMuted}
             secureTextEntry={isHidden}
             onFocus={(event) => {
@@ -187,7 +188,12 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 1,
   },
+  // Multiline text starts at the top beside a top-aligned icon, instead of
+  // floating in the middle of a tall box (Android's default).
+  fieldMultiline: { alignItems: 'flex-start' },
   icon: { marginRight: spacing.sm },
+  // Centres the icon on the first line of text.
+  iconMultiline: { marginTop: spacing.md + 2 },
   affix: { marginHorizontal: spacing.xxs },
   input: {
     flex: 1,
@@ -195,6 +201,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     ...typography.body,
   },
+  inputMultiline: { minHeight: 84, textAlignVertical: 'top' },
   trailing: { paddingLeft: spacing.sm },
   messageRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs },
   message: { marginLeft: spacing.xs, flex: 1 },
