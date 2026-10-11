@@ -25,7 +25,10 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["android.permission.CAMERA"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -59,7 +62,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": ""
+        "projectId": "853bfdba-b327-46cc-9d03-3ce58e7e9226"
       }
     }
   }
